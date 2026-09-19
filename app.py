@@ -12,6 +12,7 @@ import core
 
 APP_ROOT = Path(__file__).resolve().parent
 CACHE_DIR = APP_ROOT / "cache"
+UPDATE_SCHEMA_VERSION = "2"
 
 
 st.set_page_config(page_title="Stock Strength Alert GUI", page_icon="📈", layout="centered")
@@ -41,7 +42,16 @@ chip_path = CACHE_DIR / f"{prefix}_chip_snapshot.json"
 update_meta_path = CACHE_DIR / f"{prefix}_update_meta.json"
 
 if st.button("更新今日收盤＋Yahoo籌碼（每日一次）", type="primary", width="stretch"):
-    already_updated = update_meta_path.exists() and datetime.now().strftime("%Y-%m-%d") in update_meta_path.read_text(encoding="utf-8")
+    already_updated = False
+    if update_meta_path.exists():
+        try:
+            update_meta = json.loads(update_meta_path.read_text(encoding="utf-8"))
+            already_updated = (
+                update_meta.get("last_update_date") == datetime.now().strftime("%Y-%m-%d")
+                and update_meta.get("schema_version") == UPDATE_SCHEMA_VERSION
+            )
+        except (OSError, json.JSONDecodeError):
+            already_updated = False
     if already_updated:
         st.info("今天已更新過；直接使用下方快取分析即可。")
     else:
@@ -55,7 +65,10 @@ if st.button("更新今日收盤＋Yahoo籌碼（每日一次）", type="primary
                 history.to_csv(history_path, encoding="utf-8-sig")
                 if chip is not None:
                     core.save_chip_snapshot(chip_path, chip)
-                update_meta_path.write_text(json.dumps({"last_update_date": datetime.now().strftime("%Y-%m-%d")}), encoding="utf-8")
+            update_meta_path.write_text(
+                json.dumps({"last_update_date": datetime.now().strftime("%Y-%m-%d"), "schema_version": UPDATE_SCHEMA_VERSION}),
+                encoding="utf-8",
+            )
             st.success(f"{stock['name']} 已更新：{history.index[-1].date()}")
         except Exception as exc:
             st.error(f"更新失敗：{type(exc).__name__}。可先使用既有快取。")
