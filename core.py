@@ -37,7 +37,10 @@ try:
         sys.path.insert(0, str(LEGACY_SCRIPTS))
     import market_flow as _legacy_market_flow
 except Exception:
-    _legacy_market_flow = None
+    try:
+        import yahoo_chip as _legacy_market_flow
+    except Exception:
+        _legacy_market_flow = None
 
 
 def normalise_history(data: pd.DataFrame, min_rows: int = 20) -> pd.DataFrame:

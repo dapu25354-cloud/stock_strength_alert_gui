@@ -19,7 +19,7 @@ st.markdown(
     """
     <style>
     .block-container { max-width: 900px; padding: 1.2rem 1rem 3rem; }
-    .app-title { color: #17324d; font-size: 2rem; font-weight: 800; line-height: 1.2; margin-bottom: .2rem; }
+    .app-title { color: #17324d; font-size: clamp(1.55rem, 7vw, 2rem); font-weight: 800; line-height: 1.35; margin: 0 0 .35rem; padding: .15rem 0; white-space: normal; overflow: visible; word-break: keep-all; }
     .signal-card { padding: 1rem 1.1rem; border-radius: 14px; background: #e8f0f7; margin: .8rem 0 1rem; }
     .signal-text { color: #17324d; font-size: 1.7rem; font-weight: 800; }
     .small-note { color: #506579; font-size: .92rem; }
@@ -28,7 +28,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="app-title">個股三層轉強提醒</div>', unsafe_allow_html=True)
+st.title("個股三層轉強提醒")
 st.markdown('<div class="small-note">Yahoo 行情與公開籌碼每日更新；CMoney 當日快照若存在則優先使用。</div>', unsafe_allow_html=True)
 st.info("記憶口訣：黃燈等、綠燈試、雙綠加、紅燈停；灰燈先觀察。")
 
