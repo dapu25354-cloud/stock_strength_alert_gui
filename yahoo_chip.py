@@ -232,3 +232,56 @@ def fetch_yahoo_chip_flow(symbol: str, timeout: float = 8.0) -> dict[str, Any]:
     if not snapshot.get("source_urls"):
         return _empty("Yahoo 公開籌碼頁暫時無法取得", errors)
     return snapshot
+
+
+def normalise_chip_flow(snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep Yahoo values explicit while leaving unavailable holder trends unknown."""
+    if not isinstance(snapshot, dict):
+        return _empty("尚未取得 Yahoo 公開籌碼資料")
+    institutional = _number(snapshot.get("institutional_net"))
+    foreign = _number(snapshot.get("foreign_net"))
+    broker = _number(snapshot.get("broker_net"))
+    large_percent = _number(snapshot.get("large_holder_percent"))
+    values = [value for value in (institutional, foreign, broker, large_percent) if value is not None]
+    available = bool(values)
+    direction = "unknown"
+    if institutional is not None or foreign is not None:
+        net = institutional if institutional is not None else foreign
+        direction = "inflow" if net > 0 else "outflow" if net < 0 else "flat"
+    facts: list[str] = []
+    if foreign is not None:
+        facts.append(f"外資{'買超' if foreign > 0 else '賣超'} {abs(foreign):g} 張")
+    if institutional is not None:
+        facts.append(f"法人合計{'買超' if institutional > 0 else '賣超'} {abs(institutional):g} 張")
+    if broker is not None:
+        facts.append(f"主力{'買超' if broker > 0 else '賣超'} {abs(broker):g} 張")
+    if large_percent is not None:
+        facts.append(f"大戶持股 {large_percent:.2f}%")
+    return {
+        "available": available,
+        "source": snapshot.get("source", "Yahoo股市公開籌碼頁"),
+        "as_of": snapshot.get("as_of", ""),
+        "direction": direction,
+        "label": "；".join(facts) if facts else "Yahoo 公開籌碼資料未提供可用數值",
+        "reason": "Yahoo 公開法人、主力、資券或大戶資料已取得；未提供的持股趨勢保留未知",
+        "foreign_net": foreign,
+        "institutional_net": institutional,
+        "broker_net": broker,
+        "margin_change": _number(snapshot.get("margin_change")),
+        "margin_balance": _number(snapshot.get("margin_balance")),
+        "short_balance": _number(snapshot.get("short_balance")),
+        "large_holder_percent": large_percent,
+        "large_holder_count": _number(snapshot.get("large_holder_count")),
+        "foreign_holder_percent": _number(snapshot.get("foreign_holder_percent")),
+        "foreign_holder_change": _number(snapshot.get("foreign_holder_change")),
+        "institutional_detail": snapshot.get("institutional_detail", {}),
+        "broker_detail": snapshot.get("broker_detail", {}),
+        "margin_detail": snapshot.get("margin_detail", {}),
+        "holder_detail": snapshot.get("holder_detail", {}),
+        "source_urls": snapshot.get("source_urls", []),
+        "fetch_errors": snapshot.get("fetch_errors", []),
+        "evidence": facts,
+        "partial": True,
+        "block_buy": direction == "outflow",
+        "protect_selling": direction == "inflow",
+    }
