@@ -345,11 +345,18 @@ def _score_latest(data: pd.DataFrame, profile: dict[str, Any], chip_data: dict[s
     }
 
 
-def analyse_history(data: pd.DataFrame, chip_data: dict[str, Any] | None = None) -> dict[str, Any]:
+def analyse_history(
+    data: pd.DataFrame,
+    chip_data: dict[str, Any] | None = None,
+    include_events: bool = True,
+) -> dict[str, Any]:
     frame = normalise_history(data)
     prepared = _with_features(frame)
     profile = learn_profile(frame)
     current = _score_latest(prepared, profile, chip_data, prepared=True)
+    if not include_events:
+        return {"current": current, "profile": profile, "events": [], "history": frame}
+
     warmup = max(35, profile["rebound_window"] + 5)
     backtest_start = max(warmup, len(frame) - 420)
     events: list[dict[str, Any]] = []
