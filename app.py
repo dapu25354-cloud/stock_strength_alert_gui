@@ -22,7 +22,7 @@ st.markdown(
     <style>
     .block-container { max-width: 900px; padding: 1rem .8rem 2.5rem; }
     h1, h2, h3 { font-size: 1.08rem !important; line-height: 1 !important; margin-top: .8rem !important; }
-    .stApp p, .stApp li, .stApp label, .stApp button, .stApp [data-testid="stMarkdownContainer"], .stAlert, .stAlert p, [data-testid="stCaptionContainer"] { line-height: 1 !important; }
+    .stApp p, .stApp li, .stApp label, .stApp button, .stApp [data-testid="stMarkdownContainer"], .stAlert, .stAlert p, [data-testid="stCaptionContainer"] { font-size: 1rem !important; line-height: 1 !important; }
     [data-testid="stText"] { font-family: inherit !important; font-size: 1rem !important; line-height: 1 !important; white-space: pre-wrap !important; }
     .small-note { color: #506579; font-size: .92rem; line-height: 1 !important; }
     .signal-card { padding: .7rem .8rem; border-radius: 12px; margin: .65rem 0 .8rem; border-left: 6px solid; }
