@@ -192,38 +192,38 @@ def render_detail(stock_key: str, analysis: dict) -> None:
             st.write("目前沒有足夠案例。")
 
 
-st.title("個股三層轉強提醒")
-st.markdown(
-    '<div class="small-note">Yahoo 行情與公開籌碼每日更新；CMoney 當日快照若存在則優先使用。</div>',
-    unsafe_allow_html=True,
-)
-st.info("記憶口訣：黃燈等、綠燈試、雙綠加、紅燈停；灰燈先觀察。")
+def update_all_stocks() -> tuple[int, int, list[str]]:
+    updated = 0
+    skipped = 0
+    failed: list[str] = []
+    progress = st.progress(0, text="準備更新今日收盤資料…")
+    for index, stock_key in enumerate(STOCK_KEYS, start=1):
+        progress.progress((index - 1) / len(STOCK_KEYS), text=f"更新中：{stock_key}")
+        success, message = update_stock(stock_key)
+        if success and message == "今日已更新":
+            skipped += 1
+        elif success:
+            updated += 1
+        else:
+            failed.append(f"{stock_key}（{message}）")
+    progress.progress(1.0, text="今日資料更新完成")
+    return updated, skipped, failed
 
-view_mode = st.radio("頁面", ("個股分析", "持股總覽"), horizontal=True, key="view_mode")
 
-if view_mode == "持股總覽":
-    st.subheader("持股總覽")
-    st.caption("首頁只看燈號與操作；要看均線、籌碼與回測，再進入個股詳情。")
+def render_update_all() -> None:
     if st.button("更新全部（盤後）", type="primary", width="stretch"):
-        progress = st.progress(0, text="準備更新今日收盤資料…")
-        updated = 0
-        skipped = 0
-        failed: list[str] = []
-        for index, stock_key in enumerate(STOCK_KEYS, start=1):
-            progress.progress((index - 1) / len(STOCK_KEYS), text=f"更新中：{stock_key}")
-            success, message = update_stock(stock_key)
-            if success and message == "今日已更新":
-                skipped += 1
-            elif success:
-                updated += 1
-            else:
-                failed.append(f"{stock_key}（{message}）")
-        progress.progress(1.0, text="今日資料更新完成")
+        with st.spinner("正在取得 Yahoo 行情與公開籌碼…"):
+            updated, skipped, failed = update_all_stocks()
         st.success(f"完成：新增／更新 {updated} 檔，沿用今日快取 {skipped} 檔。")
         if failed:
             st.warning("未完成：" + "、".join(failed))
 
-    overview_rows: list[tuple[str, dict | None]] = [(stock_key, load_analysis(stock_key)) for stock_key in STOCK_KEYS]
+
+def overview_rows() -> list[tuple[str, dict | None]]:
+    return [(stock_key, load_analysis(stock_key)) for stock_key in STOCK_KEYS]
+
+
+def group_overview(rows: list[tuple[str, dict | None]]) -> dict[str, list[tuple[str, dict | None]]]:
     grouped: dict[str, list[tuple[str, dict | None]]] = {
         "🟡 第1層｜止跌跡象": [],
         "🟢 第2層｜量價回穩／資金開始接": [],
@@ -232,8 +232,7 @@ if view_mode == "持股總覽":
         "🔴 判斷失敗／停加": [],
         "⚪ 尚未更新": [],
     }
-    for stock_key, analysis in overview_rows:
-        stock = core.STOCKS[stock_key]
+    for stock_key, analysis in rows:
         current = analysis["current"] if analysis else None
         if current is None:
             grouped["⚪ 尚未更新"].append((stock_key, analysis))
@@ -250,29 +249,171 @@ if view_mode == "持股總覽":
         else:
             group = "⚪ 尚未進入第1層"
         grouped[group].append((stock_key, analysis))
+    return grouped
 
+
+def render_stock_rows(grouped: dict[str, list[tuple[str, dict | None]]], compact: bool = False) -> None:
     for group, entries in grouped.items():
         st.markdown(f"#### {group}")
         if not entries:
-            st.caption("目前沒有持股在這一層。")
+            st.caption("目前沒有股票在這一層。")
             continue
         for stock_key, analysis in entries:
             stock = core.STOCKS[stock_key]
             current = analysis["current"] if analysis else None
             if st.button(
                 f"{stock['name']} {stock['symbol'].split('.')[0]}",
-                key=f"open_{stock_key}",
+                key=f"open_{'lunch' if compact else 'overview'}_{stock_key}",
                 width="stretch",
             ):
                 st.session_state["selected_stock"] = stock_key
-                st.session_state["view_mode"] = "個股分析"
+                st.session_state["pending_view_mode"] = "個股分析"
                 st.rerun()
             if current is None:
                 st.caption("尚未更新今日資料｜按名稱進入後可更新")
+                continue
+            if compact:
+                if stock.get("observation_only", False):
+                    action = "先觀察，不加碼"
+                elif current["stage"] >= 3 and current.get("chip_confirmed"):
+                    action = "突破站穩可分批加碼；跌破停損線停損"
+                elif current["stage"] == 2 and current["price"] >= current["ma60"]:
+                    action = "核心續抱；機動倉小量試加，設停損、不攤平"
+                elif current["stage"] == 2:
+                    action = "續抱觀察；不攤平不加碼，等站回季線"
+                elif current["stage"] == 1:
+                    action = "續抱觀察；機動倉先不加"
+                elif current["checks"].get("hard_breakdown"):
+                    action = "停止機動加碼；依停損／減碼計畫處理"
+                else:
+                    action = "續抱或觀察；不攤平不加碼"
+                st.caption(
+                    f"操作：{action}｜收盤 {current['price']:.2f}｜支撐 {current['support']:.2f}｜"
+                    f"壓力 {current['resistance']:.2f}｜量比 {current['volume_ratio']:.2f}×｜"
+                    f"ATR {current['atr']:.2f}｜季線 {current['ma60']:.2f}"
+                )
             else:
                 guidance = core.action_guidance(current, observation_only=stock.get("observation_only", False))
                 holding_line = next((line for line in guidance.splitlines() if line.startswith("持股操作：")), guidance)
                 st.caption(f"收盤 {current['price']:.2f}｜{current['moving_average_state']}｜{holding_line}")
+
+
+def lunch_action(current: dict, stock: dict) -> str:
+    if stock.get("observation_only", False):
+        return "低流動性先觀察，不加碼"
+    if current["checks"].get("hard_breakdown"):
+        return "跌破支撐停加，依停損／減碼處理"
+    if current["stage"] >= 3 and current.get("chip_confirmed"):
+        return "突破站穩可分批加碼"
+    if current["stage"] == 2 and current["price"] >= current["ma60"]:
+        return "站穩季線，機動倉可小量試加"
+    if current["stage"] == 2:
+        return "未站回季線，先不加碼"
+    if current["stage"] == 1:
+        return "核心續抱，機動倉不加"
+    return "不攤平不加碼，等明確訊號"
+
+
+def render_lunch_sheet(rows: list[tuple[str, dict | None]], timeframe: str) -> None:
+    lines: list[str] = []
+    for stock_key, analysis in rows:
+        stock = core.STOCKS[stock_key]
+        code = stock["symbol"].split(".")[0]
+        if not analysis or not analysis.get("current"):
+            lines.append(f"— {code} {stock['name']}｜尚未更新")
+            continue
+        current = analysis["current"]
+        action = lunch_action(current, stock)
+        change_pct = current.get("change_pct")
+        if change_pct is None:
+            history = analysis.get("history")
+            change_pct = float(history["Close"].pct_change().iloc[-1] * 100) if history is not None else 0.0
+        change_sign = "+" if change_pct > 0 else ""
+        if current["stage"] >= 3:
+            prefix = "🟢🟢3"
+        elif current["stage"] == 2:
+            prefix = "🟢2"
+        elif current["stage"] == 1:
+            prefix = "🟡1"
+        elif current["checks"].get("hard_breakdown"):
+            prefix = "🔴"
+        else:
+            prefix = "⚪"
+        if timeframe == "1分鐘":
+            lines.append(
+                f"{prefix} {code} {stock['name']}｜現{current['price']:.2f} {change_sign}{change_pct:.2f}%｜"
+                f"支{current['support']:.2f}｜{action}"
+            )
+        elif timeframe == "5分鐘":
+            lines.append(
+                f"{prefix} {code} {stock['name']}｜現{current['price']:.2f} {change_sign}{change_pct:.2f}%｜"
+                f"支{current['support']:.2f} 壓{current['resistance']:.2f}｜量{current['volume_ratio']:.2f}×｜{action}"
+            )
+        elif timeframe == "10分鐘":
+            lines.append(
+                f"{prefix} {code} {stock['name']}｜現{current['price']:.2f} {change_sign}{change_pct:.2f}%｜"
+                f"支{current['support']:.2f} 壓{current['resistance']:.2f}｜季{current['ma60']:.2f}｜"
+                f"ATR{current['atr']:.2f}｜量{current['volume_ratio']:.2f}×｜{action}"
+            )
+        else:
+            chip = current["chip"]
+            if chip.get("available"):
+                foreign = chip.get("foreign_net")
+                institutional = chip.get("institutional_net")
+                chip_text = (
+                    f"外{float(foreign):g}" if foreign is not None else "外—"
+                ) + (
+                    f" 法{float(institutional):g}" if institutional is not None else " 法—"
+                )
+                holder_direction = chip.get("holder_trend_direction")
+                chip_text += {"inflow": " 大戶流入", "outflow": " 大戶流出"}.get(holder_direction, "")
+            else:
+                chip_text = "籌碼缺口"
+            lines.append(
+                f"{prefix} {code} {stock['name']}｜收{current['price']:.2f} {change_sign}{change_pct:.2f}%｜"
+                f"支{current['support']:.2f} 壓{current['resistance']:.2f}｜季{current['ma60']:.2f}｜"
+                f"量{current['volume_ratio']:.2f}× ATR{current['atr']:.2f}｜{chip_text}｜{action}"
+            )
+    st.text("\n".join(lines))
+
+
+def render_lunch_memo() -> None:
+    st.subheader("午餐小抄")
+    render_update_all()
+    rows = overview_rows()
+    available = [analysis for _, analysis in rows if analysis and analysis.get("current")]
+    if not available:
+        st.warning("目前還沒有小抄資料；請在家按一次「更新全部（盤後）」。")
+        return
+    dates = sorted({analysis["current"]["date"] for analysis in available})
+    date_text = dates[-1] if len(dates) == 1 else f"{dates[0]}～{dates[-1]}"
+    st.caption(f"資料日：{date_text}｜數字是最後一次更新的盤後快照；要看最新盤中數字，請按更新。")
+    st.caption("每張小抄 15 檔、一檔一行；時間越長，補充的數據越多。")
+    sheets = st.tabs(("1分鐘", "5分鐘", "10分鐘", "半小時"))
+    for sheet, timeframe in zip(sheets, ("1分鐘", "5分鐘", "10分鐘", "半小時")):
+        with sheet:
+            render_lunch_sheet(rows, timeframe)
+
+
+st.title("個股三層轉強提醒")
+st.markdown(
+    '<div class="small-note">Yahoo 行情與公開籌碼每日更新；CMoney 當日快照若存在則優先使用。</div>',
+    unsafe_allow_html=True,
+)
+st.info("記憶口訣：黃燈等、綠燈試、雙綠加、紅燈停；灰燈先觀察。")
+
+pending_view_mode = st.session_state.pop("pending_view_mode", None)
+if pending_view_mode in {"午餐小抄", "個股分析", "持股總覽"}:
+    st.session_state["view_mode"] = pending_view_mode
+view_mode = st.radio("頁面", ("午餐小抄", "個股分析", "持股總覽"), horizontal=True, key="view_mode")
+
+if view_mode == "午餐小抄":
+    render_lunch_memo()
+elif view_mode == "持股總覽":
+    st.subheader("持股總覽")
+    st.caption("首頁只看燈號與操作；要看均線、籌碼與回測，再進入個股詳情。")
+    render_update_all()
+    render_stock_rows(group_overview(overview_rows()))
 else:
     stock_menu_col, update_col = st.columns([1.65, 1], vertical_alignment="bottom")
     with stock_menu_col:

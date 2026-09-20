@@ -316,6 +316,8 @@ def _score_latest(data: pd.DataFrame, profile: dict[str, Any], chip_data: dict[s
     return {
         "date": frame.index[-1].strftime("%Y-%m-%d"),
         "price": float(row["Close"]),
+        "change_pct": float(row["change"] * 100) if pd.notna(row["change"]) else 0.0,
+        "volume": float(row["Volume"]),
         "stage": stage,
         "label": label,
         "reasons": reasons,
