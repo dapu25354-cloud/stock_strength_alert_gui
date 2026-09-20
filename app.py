@@ -204,6 +204,25 @@ view_mode = st.radio("頁面", ("個股分析", "持股總覽"), horizontal=True
 if view_mode == "持股總覽":
     st.subheader("持股總覽")
     st.caption("首頁只看燈號與操作；要看均線、籌碼與回測，再進入個股詳情。")
+    if st.button("更新全部（盤後）", type="primary", width="stretch"):
+        progress = st.progress(0, text="準備更新今日收盤資料…")
+        updated = 0
+        skipped = 0
+        failed: list[str] = []
+        for index, stock_key in enumerate(STOCK_KEYS, start=1):
+            progress.progress((index - 1) / len(STOCK_KEYS), text=f"更新中：{stock_key}")
+            success, message = update_stock(stock_key)
+            if success and message == "今日已更新":
+                skipped += 1
+            elif success:
+                updated += 1
+            else:
+                failed.append(f"{stock_key}（{message}）")
+        progress.progress(1.0, text="今日資料更新完成")
+        st.success(f"完成：新增／更新 {updated} 檔，沿用今日快取 {skipped} 檔。")
+        if failed:
+            st.warning("未完成：" + "、".join(failed))
+
     overview_rows: list[tuple[str, dict | None]] = [(stock_key, load_analysis(stock_key)) for stock_key in STOCK_KEYS]
     grouped: dict[str, list[tuple[str, dict | None]]] = {
         "🟡 第1層｜止跌跡象": [],
